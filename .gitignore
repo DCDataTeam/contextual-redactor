@@ -1,0 +1,20 @@
+.env
+/temp_docs
+/_pycache_
+venv/
+.venv/
+/Test docs
+
+# --- Python Cache Files ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- IDE & Editor Specific Files ---
+# VS Code specific settings
+.vscode/
+
+# --- Streamlit ---
+# Ignore local Streamlit configuration and secrets.
+.streamlit/
