@@ -3,6 +3,35 @@ import os
 from dotenv import load_dotenv
 from azure_client import AzureAIClient
 from utils import create_detailed_suggestions
+from azure.ai.documentintelligence.models import DocumentParagraph
+
+def merge_small_paragraphs(paragraphs: list[DocumentParagraph], min_length: int = 50) -> list[DocumentParagraph]:
+    """
+    Merges small paragraphs into the previous paragraph to create more
+    semantically meaningful chunks for the LLM.
+    """
+    if not paragraphs:
+        return []
+
+    # Create a deep copy of the paragraphs to avoid modifying the original list from the analysis result
+    from copy import deepcopy
+    paragraphs_copy = deepcopy(paragraphs)
+
+    merged_paragraphs = []
+    for para in paragraphs_copy:
+        if len(para.content) < min_length and merged_paragraphs:
+            previous_para = merged_paragraphs[-1]
+            new_content = previous_para.content + "\n" + para.content
+            
+            new_span_offset = previous_para.spans[0].offset
+            new_span_length = (para.spans[0].offset + para.spans[0].length) - new_span_offset
+            
+            previous_para.content = new_content
+            previous_para.spans[0].length = new_span_length
+        else:
+            merged_paragraphs.append(para)
+            
+    return merged_paragraphs
 
 
 def analyse_document_for_redactions(input_pdf_path: str, user_context: str):
@@ -19,9 +48,13 @@ def analyse_document_for_redactions(input_pdf_path: str, user_context: str):
     if not analysis_result.paragraphs:
         print("No paragraphs found in the document.")
         return []
+    
+    print("Step 1.5: Merging small paragraphs for better context...")
+    original_paragraphs = analysis_result.paragraphs
+    paragraphs = merge_small_paragraphs(original_paragraphs)
+    print(f"Merged {len(original_paragraphs)} paragraphs into {len(paragraphs)} more meaningful chunks.")
 
     all_llm_results_with_source = []
-    paragraphs = analysis_result.paragraphs
     num_paragraphs = len(paragraphs)
     print(f"Step 2: Processing {num_paragraphs} paragraphs with a context window...")
 

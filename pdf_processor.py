@@ -56,6 +56,11 @@ class PDFProcessor:
 
         print("\n--- END DIAGNOSTICS ---")
 
-        doc.save(output_path)
+        doc.save(
+            output_path,
+            garbage=4,       # Perform a full garbage collection to remove old/unused objects
+            deflate=True,    # Compress the file
+            clean=True
+        )
         doc.close()
         print(f"Redacted PDF saved to: {output_path}")

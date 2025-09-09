@@ -4,6 +4,7 @@
 venv/
 .venv/
 /Test docs
+test_logic.py
 
 # --- Python Cache Files ---
 __pycache__/

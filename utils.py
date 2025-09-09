@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict
-from collections import defaultdict
-from azure.ai.documentintelligence.models import AnalyzeResult
+from collections import defaultdict, Counter
+from azure.ai.documentintelligence.models import AnalyzeResult, DocumentParagraph
 from fuzzywuzzy import fuzz
 import fitz
 
@@ -51,90 +51,125 @@ def merge_consecutive_word_rects(word_rects: List[fitz.Rect]) -> List[fitz.Rect]
             final_merged_rects.append(merged_run)
     return final_merged_rects
 
-# --- Main Suggestion Creation Logic ---
+# --- Mapping LLM Findings to Document Coordinates ---
 def create_detailed_suggestions(
     analysis: AnalyzeResult, 
     llm_results_with_source: List[Dict]
 ) -> List[Dict]:
     """
-    Maps sensitive text from an LLM to its specific coordinates by searching
-    ONLY within the source paragraph where the text was found.
+    Maps sensitive text from an LLM to its specific coordinates using a more
+    robust, prioritized matching algorithm that correctly handles sub-phrases
+    and possessives.
     """
     detailed_suggestions = []
     scaling_factor = 72.0
-    HORIZONTAL_OFFSET_ADJUSTMENT = 1.0 
     
-    # Sort the list of findings from longest text to shortest text.
-    llm_results_with_source.sort(key=lambda item: len(item['llm_finding']['text']), reverse=True)
+    # --- Create a map of all words on each page, marked as "unused" ---
+    words_by_page = defaultdict(list)
+    for page in analysis.pages:
+        for word in page.words:
+            words_by_page[page.page_number - 1].append({'word_obj': word, 'used': False})
 
-    all_words = [word for page in analysis.pages for word in page.words]
+    # --- Group LLM findings by the paragraph they belong to ---
+    findings_by_paragraph = defaultdict(list)
+    for item in llm_results_with_source:
+        para_span_offset = item['source_paragraph'].spans[0].offset
+        findings_by_paragraph[para_span_offset].append(item)
 
-    for item_index, item in enumerate(llm_results_with_source):
-        llm_finding = item['llm_finding']
-        source_paragraph = item['source_paragraph']
-        text_to_find = llm_finding['text']
+    suggestion_id_counter = 0
 
-        para_span = source_paragraph.spans[0]
-        words_in_paragraph = [
-            word for word in all_words
-            if word.span.offset >= para_span.offset and
-               (word.span.offset + word.span.length) <= (para_span.offset + para_span.length)
-        ]
-
-        norm_text_to_find = text_to_find.lower().replace('.', '').replace(',', '').replace(' ', '').replace('(', '').replace(')', '')
+    # --- Process each paragraph's findings one by one ---
+    for para_offset, items in findings_by_paragraph.items():
         
-        best_match_words = []
-        best_match_score = 0
-
-        for i in range(len(words_in_paragraph)):
-            for j in range(i, len(words_in_paragraph)):
-                candidate_words = words_in_paragraph[i:j+1]
-                reconstructed_text = "".join([w.content for w in candidate_words])
-                norm_reconstructed = reconstructed_text.lower().replace('.', '').replace(',', '').replace(' ', '').replace('(', '').replace(')', '')
-                
-                score = fuzz.ratio(norm_reconstructed, norm_text_to_find)
-                if score > best_match_score:
-                    best_match_score = score
-                    best_match_words = candidate_words
-                if best_match_score == 100: break
-            if best_match_score == 100: break
+        # *** FIX #1: Prioritize longer matches first to avoid sub-phrase conflicts ***
+        sorted_items = sorted(items, key=lambda x: len(x['llm_finding']['text']), reverse=True)
         
-        if best_match_score >= 90 and best_match_words:
-            individual_word_rects = []
-            for word_obj in best_match_words:
-                if word_obj.polygon:
-                    # The polygon is a flat list of floats [x0, y0, x1, y1, ...].
-                    # We iterate through it in steps of 2 to create Point objects.
-                    points = [
-                        fitz.Point(
-                            word_obj.polygon[k] * scaling_factor,      # The x coordinate
-                            word_obj.polygon[k+1] * scaling_factor   # The y coordinate
-                        ) for k in range(0, len(word_obj.polygon), 2)
-                    ]
-                    individual_word_rects.append(fitz.Quad(points).rect)
+        for item in sorted_items:
+            llm_finding = item['llm_finding']
+            source_paragraph: DocumentParagraph = item['source_paragraph']
+            text_to_find = llm_finding['text']
+            page_num = source_paragraph.bounding_regions[0].page_number - 1
             
-            if individual_word_rects:
-                merged_line_rects = merge_consecutive_word_rects(individual_word_rects)
+            words_on_page = words_by_page.get(page_num, [])
 
-                offset_rects = [
-                    fitz.Rect(rect.x0 - 1, rect.y0 - 1, rect.x1 + 2, rect.y1 + 2)
-                    for rect in merged_line_rects
-                ]
+            para_span = source_paragraph.spans[0]
+            words_in_paragraph = [
+                w_dict for w_dict in words_on_page
+                if w_dict['word_obj'].span.offset >= para_span.offset and
+                   (w_dict['word_obj'].span.offset + w_dict['word_obj'].span.length) <= (para_span.offset + para_span.length)
+            ]
 
-                detailed_suggestions.append({
-                    'id': item_index,
-                    'text': llm_finding['text'],
-                    'category': llm_finding['category'],
-                    'reasoning': llm_finding['reasoning'],
-                    'original_index': item['original_index'],
-                    'context': source_paragraph.content,
-                    'page_num': source_paragraph.bounding_regions[0].page_number - 1,
-                    'rects': merged_line_rects
-                })
+            # *** FIX #2: More robust normalization for matching ***
+            norm_text_to_find = text_to_find.lower().replace("’s", "").replace("'s", "").replace("'", "").replace(".", "").replace(",", "").replace("(", "").replace(")", "").replace(" ", "")
+            
+            best_match_words_info = []
+            best_match_score = 0
 
-    detailed_suggestions.sort(key=lambda item: item['original_index'], reverse=False)
-        
+            for i in range(len(words_in_paragraph)):
+                for j in range(i, len(words_in_paragraph)):
+                    candidate_word_info = words_in_paragraph[i:j+1]
+                    
+                    # Skip if any word in this candidate sequence is already used
+                    if any(w['used'] for w in candidate_word_info):
+                        continue
+
+                    candidate_words = [w['word_obj'] for w in candidate_word_info]
+                    reconstructed_text = "".join([w.content for w in candidate_words])
+                    norm_reconstructed = reconstructed_text.lower().replace("’s", "").replace("'s", "").replace("'", "").replace(".", "").replace(",", "").replace("(", "").replace(")", "").replace(" ", "").replace('"', '').replace('“', '').replace('”', '')
+                    
+                    score = fuzz.ratio(norm_reconstructed, norm_text_to_find)
+                    
+                    if score > best_match_score:
+                        best_match_score = score
+                        best_match_words_info = candidate_word_info
+                    
+                    if best_match_score == 100: break
+                if best_match_score == 100: break
+            
+            if best_match_score >= 90 and best_match_words_info:
+                # Mark these words as "used" so they can't be matched again
+                for w_info in best_match_words_info:
+                    w_info['used'] = True
+
+                best_match_words = [w_info['word_obj'] for w_info in best_match_words_info]
+                
+                individual_word_rects = []
+                for word_obj in best_match_words:
+                    if word_obj.polygon and len(word_obj.polygon) >= 8:
+                        points = [
+                            fitz.Point(word_obj.polygon[k] * scaling_factor, word_obj.polygon[k+1] * scaling_factor) 
+                            for k in range(0, len(word_obj.polygon), 2)
+                        ]
+                        individual_word_rects.append(fitz.Quad(points).rect)
+                
+                if individual_word_rects:
+                    merged_line_rects = merge_consecutive_word_rects(individual_word_rects)
+                    detailed_suggestions.append({
+                        'id': suggestion_id_counter, 'text': llm_finding['text'], 'category': llm_finding['category'],
+                        'reasoning': llm_finding['reasoning'], 'context': source_paragraph.content,
+                        'page_num': page_num, 'rects': merged_line_rects
+                    })
+                    suggestion_id_counter += 1
+
+
+    
     logger.info(f"Successfully created {len(detailed_suggestions)} detailed suggestions from {len(llm_results_with_source)} LLM findings.")
+    if len(detailed_suggestions) != len(llm_results_with_source):
+        logger.warning(f"Could not find a unique physical location for {len(llm_results_with_source) - len(detailed_suggestions)} LLM findings.")
+        
+        # Use Counter to correctly handle duplicate text entries
+        llm_text_counts = Counter(item['llm_finding']['text'] for item in llm_results_with_source)
+        mapped_text_counts = Counter(s['text'] for s in detailed_suggestions)
+        
+        # Subtract the mapped counts from the LLM counts to find the difference
+        unmapped = llm_text_counts - mapped_text_counts
+        
+        if unmapped:
+            logger.error("--- MISMATCH REPORT: The following LLM findings could not be located in the document ---")
+            for text, count in unmapped.items():
+                logger.error(f"  - Text: '{text}' (LLM found {count} unmapped instance(s))")
+            logger.error("--- END OF REPORT ---")
+            
     return detailed_suggestions
 
 map_llm_results_to_coordinates = create_detailed_suggestions
