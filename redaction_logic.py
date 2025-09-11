@@ -34,7 +34,11 @@ def merge_small_paragraphs(paragraphs: list[DocumentParagraph], min_length: int 
 
 
 def analyse_document_for_redactions(input_pdf_path: str, user_context: str):
-    """Orchestrates the hybrid AI analysis with conditional entity linking and contextual DOB filtering."""
+    """
+    Orchestrates the hybrid AI analysis with conditional entity linking and contextual DOB filtering.
+    - Paragraph-by-paragraph for structured PII.
+    - Page-by-page for subjective, context-aware content.
+    """
     load_dotenv()
     azure_client = AzureAIClient()
     
@@ -128,16 +132,23 @@ def analyse_document_for_redactions(input_pdf_path: str, user_context: str):
                             'source_paragraph': target_paragraph
                         })
 
-        # Nuanced LLM analysis for sensitive content
-        if sensitive_content_rules:
-            prev_content = paragraphs[i-1].content if i > 0 else ""
-            next_content = paragraphs[i+1].content if i < len(paragraphs) - 1 else ""
-            context_block = f"{prev_content}\n\n---START OF TARGET TEXT---\n{target_paragraph.content}\n---END OF TARGET TEXT---\n\n{next_content}"
-            sensitive_findings = azure_client.get_sensitive_information(context_block, sensitive_content_rules)
+    # Nuanced LLM analysis for sensitive content
+    if sensitive_content_rules:
+        print("\nTask B: Processing sensitive content page-by-page...")
+        for page in analysis_result.pages:
+            page_content = analysis_result.content[page.spans[0].offset : page.spans[0].offset + page.spans[0].length]
+            print(f"  - Analyzing Page {page.page_number} for sensitive content...")
+
+            sensitive_findings = azure_client.get_sensitive_information(
+                text_chunk=page_content,
+                user_context=sensitive_content_rules
+            )
+
             for finding in sensitive_findings:
-                if finding['text'] in target_paragraph.content:
+                if finding['text'].lower() not in pii_exceptions:
                     all_findings_with_source.append({
-                        'llm_finding': finding, 'source_paragraph': target_paragraph
+                        'llm_finding': finding, 
+                        'source_page': page
                     })
 
     if not all_findings_with_source: return []
