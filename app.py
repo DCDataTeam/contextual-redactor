@@ -56,7 +56,9 @@ def main():
     st.write("Upload a PDF to redact. Use the options below to guide the AI and refine the results.")
 
     temp_dir = "temp_docs"
+    output_dir = "redacted_docs"
     os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf", key="pdf_uploader")
 
@@ -347,7 +349,7 @@ def main():
                 else:
                     final_redaction_areas = list(approved_areas_by_page.items())
                     output_filename = os.path.splitext(os.path.basename(st.session_state.processed_file))[0] + "_redacted.pdf"
-                    output_pdf_path = os.path.join("temp_docs", output_filename)
+                    output_pdf_path = os.path.join(output_dir, output_filename)
                     
                     processor = PDFProcessor(st.session_state.processed_file)
                     processor.apply_redactions(final_redaction_areas, output_pdf_path)
