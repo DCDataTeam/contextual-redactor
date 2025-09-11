@@ -173,3 +173,4 @@ def create_detailed_suggestions(
     return detailed_suggestions
 
 map_llm_results_to_coordinates = create_detailed_suggestions
+

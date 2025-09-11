@@ -210,12 +210,15 @@ class AzureAIClient:
         Uses an LLM for nuanced, context-aware redaction based on specific user rules.
         """
 
-        system_prompt = """
-        You are a highly advanced document analysis tool. Your ONLY task is to analyze the provided text for sensitive or subjective content based on the user's specific instructions.
+        system_prompt = f"""
+        You are a highly advanced document analysis tool. Your task is to analyze a specific block of text based on a user's rule, using the surrounding text for context only.
 
-        **USER'S SENSITIVE CONTENT RULE:** "{sensitive_content_rules}"
+        **USER'S SENSITIVE CONTENT RULE:** "{user_context}"
 
-        Search the document for passages, sentences, or quotations that match this rule.
+        --- YOUR THOUGHT PROCESS ---
+        1. First, I will read the full text to understand the full context.
+        2. Second, I will ONLY extract passages, sentences, or quotations from the "TARGET TEXT" that strictly match the user's rule. I will not extract anything from the context block.
+        
         For each match, use the category `SensitiveContent`. In your reasoning, you MUST explain how the extracted text specifically relates to the user's rule.
 
         CRITICAL: Only extract text that directly matches the user's rule. Do not extract anything else.
@@ -225,7 +228,6 @@ class AzureAIClient:
         Each object must have "text", "category", and "reasoning". If nothing is found, return an empty "redactions" array.
         """
         
-        #print(user_prompt)  # Debug: Print the user prompt to verify its content
         try:
             response = self.openai_client.chat.completions.create(
                 model=self.openai_deployment,

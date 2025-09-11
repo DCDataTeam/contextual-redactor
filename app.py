@@ -48,6 +48,8 @@ def main():
         st.session_state.drawing_mode = "rect"
     if 'active_page_index' not in st.session_state:
         st.session_state.active_page_index = 0
+    if 'last_promoted_ids' not in st.session_state:
+        st.session_state.last_promoted_ids = []
 
     # --- Main App UI ---
     st.title("AI-Powered Document Redaction Tool")
@@ -98,9 +100,12 @@ def main():
         with col1:
             st.subheader("AI Suggestions")
             st.write("Control all instances of a term or expand to manage each one individually.")
+            doc = fitz.open(st.session_state.processed_file)
+
             grouped_suggestions = defaultdict(list)
             for s in st.session_state.suggestions:
                 grouped_suggestions[s['text']].append(s)
+            
             for text, instances in grouped_suggestions.items():
                 all_ids = [inst['id'] for inst in instances]
                 all_checked = all(st.session_state.approval_state.get(id, False) for id in all_ids)
@@ -112,15 +117,33 @@ def main():
                     for id in all_ids:
                         st.session_state.approval_state[id] = master_state
                     st.rerun()
+
                 with st.expander("Show individual occurrences"):
-                    for inst in instances:
-                        context = inst['context']
-                        start = max(0, context.find(text) - 30)
-                        end = min(len(context), start + len(text) + 60)
-                        label = f"Pg {inst['page_num'] + 1}: ...{context[start:end]}..."
-                        st.session_state.approval_state[inst['id']] = st.checkbox(
-                            label, value=st.session_state.approval_state.get(inst['id'], True), key=f"cb_{inst['id']}"
+                    for instance in instances:
+                        
+                        if instance['category'] != 'Manual Selection':
+                            context = instance['context']
+                            start = max(0, context.find(text) - 30)
+                            end = min(len(context), start + len(text) + 60)
+                            label = f"Pg {instance['page_num'] + 1}: ...{context[start:end]}..." 
+
+                        else:
+                            page = doc[instance['page_num']]
+                            if instance['rects']:
+                                main_rect = instance['rects'][0]
+                                context_rect = main_rect + (-80, -5, 80, 5)
+                                words_in_area = page.get_text("words", clip=context_rect)
+                                words_in_area.sort(key=lambda w: w[0])
+                                context_snippet = " ".join(w[4] for w in words_in_area)
+                                highlighted_snippet = context_snippet.replace(text, f"**{text}**")
+                                label = f"Pg {instance['page_num'] + 1}: ...{highlighted_snippet}..."
+                            else:
+                                label = f"Pg {instance['page_num'] + 1}: (No context preview available)"
+                        
+                        st.session_state.approval_state[instance['id']] = st.checkbox(
+                            label, value=st.session_state.approval_state.get(instance['id'], True), key=f"cb_{instance['id']}"
                         )
+            doc.close()
 
         with col2:
             st.subheader("Interactive Document Preview")
@@ -159,9 +182,80 @@ def main():
                 page_index = st.session_state.active_page_index
                 # --- END OF NAVIGATION LOGIC ---
 
-                # Toggle between draw and edit mode
-                mode_toggle = st.checkbox("Enable Edit/Delete Mode", value=(st.session_state.drawing_mode == "transform"))
-                st.session_state.drawing_mode = "transform" if mode_toggle else "rect"
+                tool_cols = st.columns(3)
+                with tool_cols[0]:
+                    # Toggle between draw and edit mode
+                    mode_toggle = st.checkbox("Enable Edit/Delete Mode")#, value=(st.session_state.drawing_mode == "transform"))
+                    st.session_state.drawing_mode = "transform" if mode_toggle else "rect"
+
+                with tool_cols[1]:
+                    can_promote = len(st.session_state.manual_rects.get(page_index, [])) > 0
+                    if st.button("Redact all occurrences of last drawn shape", disabled=not can_promote, use_container_width=True):
+
+                        st.session_state.last_promoted_ids = []
+                        
+                        last_drawn_shape = st.session_state.manual_rects[page_index][-1]#.pop()
+                        
+                        doc = fitz.open(st.session_state.processed_file)
+                        page = doc[page_index]
+                        
+                        # Scale canvas coords to PDF coords
+                        original_img_width = st.session_state.original_pdf_images[page_index].width
+                        scaling_factor = (72.0 / PREVIEW_DPI) * (original_img_width / CANVAS_DISPLAY_WIDTH)
+                        
+                        x1, y1 = last_drawn_shape["left"], last_drawn_shape["top"]
+                        x2, y2 = x1 + last_drawn_shape["width"], y1 + last_drawn_shape["height"]
+                        pdf_rect = fitz.Rect(x1 * scaling_factor, y1 * scaling_factor, x2 * scaling_factor, y2 * scaling_factor)
+                        
+                        # Extract text under the drawn rectangle
+                        text_to_find = page.get_text("text", clip=pdf_rect).strip()
+                        
+                        if text_to_find:
+                            newly_promoted_ids = []
+                            # Search all pages for this text
+                            for p_num, p_obj in enumerate(doc):
+                                words_on_page = p_obj.get_text("words")  
+                                
+                                for word_index, word_tuple in enumerate(words_on_page):
+                                    x0, y0, x1, y1, word_text = word_tuple[:5]
+
+                                    normalised_word = word_text.lower().rstrip(".,;:!?'’s()")
+                                    normalised_text_to_find = text_to_find.lower()
+
+                                    if normalised_word == normalised_text_to_find:
+                                        # It's a valid whole-word match!
+                                        area_rect = fitz.Rect(x0, y0, x1, y1)
+                                        new_id = f"promo_{text_to_find.replace(' ','_')}_{p_num}_{word_index}"
+                                    
+                                        new_suggestion = {
+                                            'id': new_id,
+                                            'text': text_to_find,
+                                            'category': 'Manual Selection',
+                                            'reasoning': 'Identified by user and found in all occurrences.',
+                                            'context': p_obj.get_text("text"), # The whole page as context
+                                            'page_num': p_num,
+                                            'rects': [area_rect] # PyMuPDF returns a list of fitz.Rect
+                                        }
+
+                                        # Avoid adding duplicates
+                                        if not any(s['id'] == new_id for s in st.session_state.suggestions):
+                                            st.session_state.suggestions.append(new_suggestion)
+                                            st.session_state.approval_state[new_id] = True
+                                            newly_promoted_ids.append(new_id)
+                            st.session_state.last_promoted_ids = newly_promoted_ids
+                        doc.close()
+                        st.rerun()
+                
+                with tool_cols[2]:
+                    # Undo button is only active if there's a promotion to undo
+                    can_undo = len(st.session_state.last_promoted_ids) > 0
+                    if st.button("Undo last 'Redact All'", disabled=not can_undo, use_container_width=True):
+                        ids_to_remove = st.session_state.last_promoted_ids
+                        st.session_state.suggestions = [s for s in st.session_state.suggestions if s['id'] not in ids_to_remove]
+                        for id_to_remove in ids_to_remove:
+                            st.session_state.approval_state.pop(id_to_remove, None)
+                        st.session_state.last_promoted_ids = [] # Clear the undo buffer
+                        st.rerun()
 
                 # DYNAMIC BACKGROUND & SCALING LOGIC
                 original_image = st.session_state.original_pdf_images[page_index]
