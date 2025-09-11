@@ -75,6 +75,10 @@ def main():
             f.write(uploaded_file.getbuffer())
 
         if st.button("Analyse Document"):
+            is_new_file = st.session_state.processed_file != input_pdf_path
+            if is_new_file or not st.session_state.original_pdf_images:
+                with st.spinner("Rendering document preview..."):
+                    st.session_state.original_pdf_images = get_original_pdf_images(input_pdf_path)
             st.session_state.suggestions = []
             st.session_state.approval_state = {}
             st.session_state.final_pdf_path = None
