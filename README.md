@@ -31,6 +31,8 @@ This is all wrapped in an interactive Streamlit UI that allows a human reviewer 
 ## Demo
 
 
+![A demonstration of the Contextual Redactor UI, showing the AI suggestions list and the interactive document preview.](./assets/demo-screenshot.png)
+
 *The main user interface, showing the AI suggestion checklist on the left and the interactive document preview on the right.*
 
 ## Tech Stack
