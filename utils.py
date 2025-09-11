@@ -4,6 +4,9 @@ from collections import defaultdict, Counter
 from azure.ai.documentintelligence.models import AnalyzeResult, DocumentParagraph
 from fuzzywuzzy import fuzz
 import fitz
+import os
+from PIL import Image
+from io import BytesIO
 
 # --- Logger Setup ---
 def get_logger():
@@ -178,5 +181,17 @@ def create_detailed_suggestions(
             
     return detailed_suggestions
 
-map_llm_results_to_coordinates = create_detailed_suggestions
+# --- PDF to Image Conversion for Preview ---
+PREVIEW_DPI = 150
+def get_original_pdf_images(pdf_path):
+    """Extracts each page of a PDF as a Pillow Image object."""
+    if not os.path.exists(pdf_path): return []
+    try:
+        doc = fitz.open(pdf_path)
+        images = [Image.open(BytesIO(page.get_pixmap(dpi=PREVIEW_DPI).tobytes("png"))) for page in doc]
+        doc.close()
+        return images
+    except Exception as e:
+        logger.error(f"Error opening or rendering PDF: {e}")
+        return []
 

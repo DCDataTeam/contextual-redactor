@@ -2,29 +2,18 @@ import streamlit as st
 import fitz  # PyMuPDF
 import os
 from collections import defaultdict
-from PIL import Image, ImageDraw
-from io import BytesIO
+from PIL import ImageDraw
 from streamlit_drawable_canvas import st_canvas
 from redaction_logic import analyse_document_for_redactions
 from pdf_processor import PDFProcessor
+from utils import get_original_pdf_images
+
 
 st.set_page_config(page_title="AI Document Redactor", layout="wide")
 
 PREVIEW_DPI = 150
 # Define a fixed display width for the canvas to prevent overflow
 CANVAS_DISPLAY_WIDTH = 800
-
-def get_original_pdf_images(pdf_path):
-    """Extracts each page of a PDF as a Pillow Image object."""
-    if not os.path.exists(pdf_path): return []
-    try:
-        doc = fitz.open(pdf_path)
-        images = [Image.open(BytesIO(page.get_pixmap(dpi=PREVIEW_DPI).tobytes("png"))) for page in doc]
-        doc.close()
-        return images
-    except Exception as e:
-        st.error(f"Error opening or rendering PDF: {e}")
-        return []
 
 def main():
     """The main function that runs the Streamlit application."""
