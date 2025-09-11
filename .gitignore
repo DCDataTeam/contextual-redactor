@@ -5,6 +5,8 @@ venv/
 .venv/
 /Test docs
 test_logic.py
+test_pipeline.py
+diagnostic_log.txt
 
 # --- Python Cache Files ---
 __pycache__/

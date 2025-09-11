@@ -4,21 +4,14 @@ import os
 from collections import defaultdict
 from PIL import Image, ImageDraw
 from io import BytesIO
-
-# Import the drawable canvas component
 from streamlit_drawable_canvas import st_canvas
-
-# Import your existing backend logic files
 from redaction_logic import analyse_document_for_redactions
 from pdf_processor import PDFProcessor
 
-# --- App Configuration and State Management ---
 st.set_page_config(page_title="AI Document Redactor", layout="wide")
 
-
-# --- Helper Functions ---
 PREVIEW_DPI = 150
-# *** FIX #1: Define a fixed display width for the canvas to prevent overflow ***
+# Define a fixed display width for the canvas to prevent overflow
 CANVAS_DISPLAY_WIDTH = 800
 
 def get_original_pdf_images(pdf_path):
@@ -36,7 +29,7 @@ def get_original_pdf_images(pdf_path):
 def main():
     """The main function that runs the Streamlit application."""
 
-    # Initialize all session state variables
+    # Initialise all session state variables
     if 'suggestions' not in st.session_state:
         st.session_state.suggestions = []
     if 'processed_file' not in st.session_state:
@@ -53,6 +46,8 @@ def main():
         st.session_state.manual_rects = defaultdict(list)
     if 'drawing_mode' not in st.session_state:
         st.session_state.drawing_mode = "rect"
+    if 'active_page_index' not in st.session_state:
+        st.session_state.active_page_index = 0
 
     # --- Main App UI ---
     st.title("AI-Powered Document Redaction Tool")
@@ -68,7 +63,7 @@ def main():
         placeholder=(
             "The AI redacts common personal data by default. Use this box to provide exceptions or new rules.\n\n"
         ),
-        height=150,
+        height=100,
         key='user_context'
     )
 
@@ -82,6 +77,7 @@ def main():
             st.session_state.approval_state = {}
             st.session_state.final_pdf_path = None
             st.session_state.manual_rects = defaultdict(list)
+            st.session_state.active_page_index = 0
             
             with st.spinner("Analysing document with your instructions..."):
                 suggestions = analyse_document_for_redactions(input_pdf_path, st.session_state.user_context)
@@ -129,17 +125,48 @@ def main():
         with col2:
             st.subheader("Interactive Document Preview")
             if st.session_state.original_pdf_images:
-                page_numbers = list(range(1, len(st.session_state.original_pdf_images) + 1))
-                page_to_edit = st.selectbox("Select a page to view and manually redact:", page_numbers)
-                page_index = page_to_edit - 1
 
+                # Navigation Logic start
+                total_pages = len(st.session_state.original_pdf_images)
+                nav_cols = st.columns([1, 1, 6, 1, 1]) # Create columns for layout
+
+                # Previous Page Button
+                with nav_cols[0]:
+                    if st.button("⬅️", use_container_width=True, disabled=(st.session_state.active_page_index == 0)):
+                        st.session_state.active_page_index -= 1
+                        st.rerun()
+
+                with nav_cols[1]:
+                    if st.button("Prev", use_container_width=True, disabled=(st.session_state.active_page_index == 0)):
+                        st.session_state.active_page_index -= 1
+                        st.rerun()
+                
+                # Page Counter Display
+                with nav_cols[2]:
+                    st.markdown(f"<p style='text-align: center; font-weight: bold;'>Page {st.session_state.active_page_index + 1} of {total_pages}</p>", unsafe_allow_html=True)
+                
+                # Next Page Button
+                with nav_cols[3]:
+                    if st.button("Next", use_container_width=True, disabled=(st.session_state.active_page_index >= total_pages - 1)):
+                        st.session_state.active_page_index += 1
+                        st.rerun()
+
+                with nav_cols[4]:
+                    if st.button("➡️", use_container_width=True, disabled=(st.session_state.active_page_index >= total_pages - 1)):
+                        st.session_state.active_page_index += 1
+                        st.rerun()
+
+                page_index = st.session_state.active_page_index
+                # --- END OF NAVIGATION LOGIC ---
+
+                # Toggle between draw and edit mode
                 mode_toggle = st.checkbox("Enable Edit/Delete Mode", value=(st.session_state.drawing_mode == "transform"))
                 st.session_state.drawing_mode = "transform" if mode_toggle else "rect"
 
-                # --- DYNAMIC BACKGROUND & SCALING LOGIC ---
+                # DYNAMIC BACKGROUND & SCALING LOGIC
                 original_image = st.session_state.original_pdf_images[page_index]
                 
-                # *** FIX #1: Calculate scaling factor for display ***
+                # Calculate scaling factor for display
                 display_scaling_factor = CANVAS_DISPLAY_WIDTH / original_image.width
                 display_height = int(original_image.height * display_scaling_factor)
                 
@@ -163,7 +190,7 @@ def main():
                         )
                         draw.rectangle(scaled_rect, fill="black")
 
-                # *** FIX #3: Pre-draw existing manual redactions onto the background to prevent flickering ***
+                # Pre-draw existing manual redactions onto the background
                 for obj in st.session_state.manual_rects.get(page_index, []):
                     # Manual rects are stored relative to the canvas, so we need to scale them for display
                     x1, y1 = obj["left"], obj["top"]
@@ -180,7 +207,7 @@ def main():
                     height=display_height,
                     width=CANVAS_DISPLAY_WIDTH,
                     drawing_mode=st.session_state.drawing_mode,
-                    # *** FIX #2: Load initial drawing from state to persist edits ***
+                    # Load initial drawing from state to persist edits
                     initial_drawing={"objects": st.session_state.manual_rects.get(page_index, [])},
                     key=f"canvas_{page_index}",
                 )
@@ -197,12 +224,12 @@ def main():
             with st.spinner("Applying all redactions..."):
                 approved_areas_by_page = defaultdict(list)
 
-                # 1. Add AI-approved redactions (these are already in PDF point coordinates)
+                # Add AI-approved redactions (these are already in PDF point coordinates)
                 approved_suggestions = [s for s in st.session_state.suggestions if st.session_state.approval_state.get(s['id'])]
                 for s in approved_suggestions:
                     approved_areas_by_page[s['page_num']].extend(s.get('rects', []))
 
-                # 2. Add manually drawn redactions, scaling them correctly back to PDF coordinates
+                # Add manually drawn redactions, scaling them correctly back to PDF coordinates
                 for page_num, canvas_objects in st.session_state.manual_rects.items():
                     original_img_width = st.session_state.original_pdf_images[page_num].width
                     # This factor converts from the displayed canvas coordinates back to PDF points

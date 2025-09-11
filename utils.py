@@ -81,7 +81,7 @@ def create_detailed_suggestions(
     # --- Process each paragraph's findings one by one ---
     for para_offset, items in findings_by_paragraph.items():
         
-        # *** FIX #1: Prioritize longer matches first to avoid sub-phrase conflicts ***
+        #  Prioritize longer matches first to avoid sub-phrase conflicts
         sorted_items = sorted(items, key=lambda x: len(x['llm_finding']['text']), reverse=True)
         
         for item in sorted_items:
@@ -99,7 +99,7 @@ def create_detailed_suggestions(
                    (w_dict['word_obj'].span.offset + w_dict['word_obj'].span.length) <= (para_span.offset + para_span.length)
             ]
 
-            # *** FIX #2: More robust normalization for matching ***
+            # Normalization for matching
             norm_text_to_find = text_to_find.lower().replace("’s", "").replace("'s", "").replace("'", "").replace(".", "").replace(",", "").replace("(", "").replace(")", "").replace(" ", "")
             
             best_match_words_info = []
