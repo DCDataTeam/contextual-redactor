@@ -30,7 +30,6 @@ This is all wrapped in an interactive Streamlit UI that allows a human reviewer 
 
 ## Demo
 
-
 ![A demonstration of the Contextual Redactor UI, showing the AI suggestions list and the interactive document preview.](./assets/demo-screenshot.png)
 
 *The main user interface, showing the AI suggestion checklist on the left and the interactive document preview on the right.*
@@ -48,12 +47,12 @@ This is all wrapped in an interactive Streamlit UI that allows a human reviewer 
 
 ## Setup and Installation
 
-Follow these steps to set up and run the project locally.
+There are two ways to set up the project environment: using `pip` with `requirements.txt`, or using `Poetry`.
 
 #### 1. Prerequisites
 
 - Python 3.12 or higher.
-- [Poetry](https://python-poetry.org/docs/#installation) for dependency management.
+- [Poetry](https://python-poetry.org/docs/#installation) for dependency management. (Not essential)
 - An active Microsoft Azure subscription with access to the required AI services.
 
 #### 2. Clone the Repository
@@ -70,6 +69,23 @@ Poetry will create a virtual environment and install all necessary packages from
 ```bash
 poetry install
 ```
+
+
+
+If you do not have Poetry installed you can use the standard Python approach:
+
+1.**Create a Virtual Environment:**
+    ``bash     python -m venv venv     ``
+
+
+2.**Activate the Environment:**
+    -On Windows: `.\venv\Scripts\activate`
+    -On macOS/Linux: `source venv/bin/activate`
+
+3.**Install Dependencies:**
+    ``bash     pip install -r requirements.txt     ``
+
+---
 
 #### 4. Configure Environment Variables
 
@@ -88,7 +104,7 @@ The application requires credentials for three separate Azure services.
    # Azure OpenAI Credentials
    AZURE_OPENAI_ENDPOINT="<Your_OpenAI_Endpoint>"
    AZURE_OPENAI_KEY="<Your_OpenAI_Key>"
-   AZURE_OPENAI_DEPLOYMENT_NAME="<Your_Deployment_Name_for_GPT-4o_or_GPT-4>"
+   AZURE_OPENAI_DEPLOYMENT_NAME="<Your_Deployment_Name_for_GPT-4o>"
 
    # Azure Language Service Credentials
    AZURE_LANGUAGE_ENDPOINT="<Your_Language_Service_Endpoint>"
@@ -99,7 +115,7 @@ The application requires credentials for three separate Azure services.
 
 ## Usage
 
-1. Activate the Poetry virtual environment:
+1. Activate the Poetry virtual environment (if using Poetry):
 
    ```bash
    poetry shell
