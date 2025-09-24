@@ -76,19 +76,31 @@ If you do not have Poetry installed you can use the standard Python approach:
 
 1.**Create a Virtual Environment:**
 
- ``b``
+ ```bash
+   python -m venv venv
+   ```
 
 2.**Activate the Environment:**
 
 
-    -On Windows: `.\venv\Scripts\activate`
+ -On Windows: 
+
+```bash
+.\venv\Scripts\activate
+```
 
 
-    -On macOS/Linux: `source venv/bin/activate`
+ -On macOS/Linux: 
+
+```bash
+source venv/bin/activate
+```
 
 3.**Install Dependencies:**
 
-    ``pip install -r requirements.txt     ``
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
