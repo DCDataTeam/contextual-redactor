@@ -76,8 +76,7 @@ If you do not have Poetry installed you can use the standard Python approach:
 
 1.**Create a Virtual Environment:**
 
-
- **``bash     python -m venv venv     ``**
+ ``b``
 
 2.**Activate the Environment:**
 
@@ -89,8 +88,7 @@ If you do not have Poetry installed you can use the standard Python approach:
 
 3.**Install Dependencies:**
 
-
-    ``bash     pip install -r requirements.txt     ``
+    ``pip install -r requirements.txt     ``
 
 ---
 
