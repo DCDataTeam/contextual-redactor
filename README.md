@@ -74,13 +74,13 @@ poetry install
 
 If you do not have Poetry installed you can use the standard Python approach:
 
-1.**Create a Virtual Environment:**
+- **Create a Virtual Environment:**
 
  ```bash
    python -m venv venv
    ```
 
-2.**Activate the Environment:**
+- **Activate the Environment:**
 
 
  -On Windows: 
@@ -96,7 +96,7 @@ If you do not have Poetry installed you can use the standard Python approach:
 source venv/bin/activate
 ```
 
-3.**Install Dependencies:**
+- **Install Dependencies:**
 
 ```bash
 pip install -r requirements.txt
