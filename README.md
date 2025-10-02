@@ -114,18 +114,19 @@ The application requires credentials for three separate Azure services.
    ```env
    # .env.example
 
-   # Azure Document Intelligence Credentials
-   AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT="<Your_Document_Intelligence_Endpoint>"
-   AZURE_DOCUMENT_INTELLIGENCE_KEY="<Your_Document_Intelligence_Key>"
+    # Azure Document Intelligence Credentials
+    AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT="<Your_Document_Intelligence_Endpoint>"
+    AZURE_DOCUMENT_INTELLIGENCE_KEY="<Your_Document_Intelligence_Key>"
 
-   # Azure OpenAI Credentials
-   AZURE_OPENAI_ENDPOINT="<Your_OpenAI_Endpoint>"
-   AZURE_OPENAI_KEY="<Your_OpenAI_Key>"
-   AZURE_OPENAI_DEPLOYMENT_NAME="<Your_Deployment_Name_for_GPT-4o>"
+    # Azure OpenAI Credentials
+    AZURE_OPENAI_ENDPOINT="<Your_OpenAI_Endpoint>"
+    AZURE_OPENAI_KEY="<Your_OpenAI_Key>"
+    AZURE_OPENAI_DEPLOYMENT_NAME="<Your_Deployment_Name_for_GPT-4o>"
+    AZURE_OPENAI_GPT35_DEPLOYMENT_NAME="<Your_Deployment_Name_for_GPT-3.5>"
 
-   # Azure Language Service Credentials
-   AZURE_LANGUAGE_ENDPOINT="<Your_Language_Service_Endpoint>"
-   AZURE_LANGUAGE_KEY="<Your_Language_Service_Key>"
+    # Azure Language Service Credentials
+    AZURE_LANGUAGE_ENDPOINT="<Your_Language_Service_Endpoint>"
+    AZURE_LANGUAGE_KEY="<Your_Language_Service_Key>"
    ```
 3. Log in to the [Azure Portal](https://portal.azure.com) and create the three required resources (Document Intelligence, OpenAI, Language Service).
 4. Fill in the values in your `.env` file with the corresponding **Endpoint URLs** and **Keys** from your Azure resources.
